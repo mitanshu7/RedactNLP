@@ -2,12 +2,10 @@
 import gradio as gr
 import cv2 # OpenCV, to read and manipulate images
 import easyocr # EasyOCR, for OCR
-from pdf2image import convert_from_path # pdf2image, to convert PDF to images
-import img2pdf # img2pdf, to convert images to PDF
-import torch # PyTorch, for deep learning   
+import torch # PyTorch, for deep learning  
+import pymupdf # PDF manipulation
 from transformers import pipeline # Hugging Face Transformers, for NER
 import os # OS, for file operations
-import multiprocessing as mp # Multiprocessing, to speed up the process
 from glob import glob # Glob, to get file paths
 
 ##########################################################################################################
@@ -26,32 +24,33 @@ print(f"Using device: {device}")
 print("Initiating nlp pipeline")
 nlp = pipeline("token-classification", model="dslim/distilbert-NER", device=device)
 
-# Image format
-img_format = 'ppm'
-
-# DPI
-dpi = 150
-
 ##########################################################################################################
 ## Functions
 
+# Define img_format
+img_format = "png"
+
+# Convert pdf to set of images
 def convert_to_images(pdf_file_path):
 
     # Create a directory to store pdf images
     pdf_images_dir = f'{pdf_file_path}_images'
     os.makedirs(pdf_images_dir, exist_ok=True)
 
+    # DPI
+    dpi = 150
+
     # Convert the PDF to images
     print("Converting PDF to images...")
-    convert_from_path(pdf_file_path, dpi=dpi, thread_count=mp.cpu_count(), output_folder=pdf_images_dir, fmt=img_format)
-
-    # Fix the file names
-    for file in os.listdir(pdf_images_dir):
-        os.rename(os.path.join(pdf_images_dir, file), os.path.join(pdf_images_dir, file.split('-')[-1]))
+    doc = pymupdf.open(pdf_file_path)  # open document
+    for page in doc:  # iterate through the pages
+        pix = page.get_pixmap(dpi=dpi)  # render page to an image
+        pix.save(f"{pdf_images_dir}/page-{page.number}.{img_format}")  # store image as a PNG
 
     # Return the directory with the images
     return pdf_images_dir
 
+# Do the redaction
 def redact_image(pdf_image_path, redaction_score_threshold):
 
     # Loop through the images
@@ -110,6 +109,7 @@ def redact_image(pdf_image_path, redaction_score_threshold):
 
     return redacted_image_path
 
+# Convert the set of redacted images to a pdf
 def stich_images_to_pdf(redacted_image_files, input_pdf_name):
 
     # Sort the redacted images
@@ -117,15 +117,27 @@ def stich_images_to_pdf(redacted_image_files, input_pdf_name):
 
     # Convert the redacted images to a single PDF
     print("Converting redacted images to PDF...")
-    redacted_pdf_path = f'/tmp/{input_pdf_name}_redacted.pdf'
-    with open(redacted_pdf_path, 'wb') as f:
-        f.write(img2pdf.convert(redacted_image_files))
+    redacted_pdf_folder = "/tmp/gradio/redacted"
+    os.makedirs(redacted_pdf_folder, exist_ok=True )
+    redacted_pdf_path = f'{redacted_pdf_folder}/{input_pdf_name}_redacted.pdf'
 
-    print(f"PDF saved as {redacted_pdf_path}")
+    doc = pymupdf.open()
+    for redacted_image_file in redacted_image_files:
+        img = pymupdf.open(redacted_image_file)  # open pic as document
+        rect = img[0].rect  # pic dimension
+        pdfbytes = img.convert_to_pdf()  # make a PDF stream
+        img.close()  # no longer needed
+        imgPDF = pymupdf.open("pdf", pdfbytes)  # open stream as PDF
+        page = doc.new_page(width = rect.width,  # new page with ...
+                        height = rect.height)  # pic dimension
+        page.show_pdf_page(rect, imgPDF, 0)  # image fills the page
+    doc.save(redacted_pdf_path)
+
+    # print(f"PDF saved as {redacted_pdf_path}")
 
     return redacted_pdf_path
 
-def cleanup(redacted_image_files, pdf_images, pdf_images_dir):
+def cleanup(redacted_image_files, pdf_images, pdf_images_dir, original_pdf):
 
     # Remove the directory with the images
     print("Cleaning up...")
@@ -141,8 +153,12 @@ def cleanup(redacted_image_files, pdf_images, pdf_images_dir):
     # Remove the pdf images directory
     os.rmdir(pdf_images_dir)
 
+    # Remove original pdf
+    os.remove(original_pdf)
+
     return None
 
+# Func to control ui
 def predict(input_pdf_path, sensitivity):
 
     print("Setting threshold")
@@ -175,9 +191,8 @@ def predict(input_pdf_path, sensitivity):
     print("Stitching images to pdf")
     redacted_pdf_path = stich_images_to_pdf(redacted_image_files, input_pdf_name)
 
-    # Cleanup
-    print("Cleaning residue")
-    cleanup(redacted_image_files, pdf_images, pdf_images_dir)
+    print("Cleaning up")
+    cleanup(redacted_image_files, pdf_images, pdf_images_dir, input_pdf_path)
 
     return redacted_pdf_path
 
@@ -204,7 +219,7 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
                 1. The PDF pages are converted to images.
                 2. EasyOCR is run on the converted images to extract text.
-                3. "FacebookAI/xlm-roberta-large-finetuned-conll03-english" model does the token classification.
+                3. "dslim/distilbert-NER" model does the token classification.
                 4. Non-recoverable mask is applied to identified elements.
                 """)
     
