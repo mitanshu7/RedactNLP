@@ -15,7 +15,7 @@ from glob import glob # Glob, to get file paths
 
 # Easyocr model
 print("Initiating easyocr")
-reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available())
+reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available(), model_storage_directory='.')
 
 # Use gpu if available
 print("Using gpu if available")
