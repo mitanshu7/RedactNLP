@@ -1,6 +1,8 @@
+--index-url https://download.pytorch.org/whl/cpu
+torch
+transformers
+gradio
 opencv-python
 easyocr
 pdf2image
 img2pdf
-torch
-transformers

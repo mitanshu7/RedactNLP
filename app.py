@@ -14,13 +14,17 @@ from glob import glob # Glob, to get file paths
 # Initiate the models
 
 # Easyocr model
+print("Initiating easyocr")
 reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available())
 
 # Use gpu if available
+print("Using gpu if available")
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+print(f"Using device: {device}")
 
 # Ner model
-nlp = pipeline("token-classification", model="FacebookAI/xlm-roberta-large-finetuned-conll03-english", device=device)
+print("Initiating nlp pipeline")
+nlp = pipeline("token-classification", model="dslim/distilbert-NER", device=device)
 
 # Image format
 img_format = 'ppm'
@@ -113,7 +117,7 @@ def stich_images_to_pdf(redacted_image_files, input_pdf_name):
 
     # Convert the redacted images to a single PDF
     print("Converting redacted images to PDF...")
-    redacted_pdf_path = f'{input_pdf_name}_redacted.pdf'
+    redacted_pdf_path = f'/tmp/{input_pdf_name}_redacted.pdf'
     with open(redacted_pdf_path, 'wb') as f:
         f.write(img2pdf.convert(redacted_image_files))
 
@@ -139,22 +143,27 @@ def cleanup(redacted_image_files, pdf_images, pdf_images_dir):
 
     return None
 
-def predict(input_pdf_path, redaction_score_threshold):
+def predict(input_pdf_path, sensitivity):
 
-    # Adjust threshold
-    redaction_score_threshold = (100-redaction_score_threshold)/100
+    print("Setting threshold")
+    # Convert sensitivity to threshold
+    redaction_score_threshold = (100-sensitivity)/100
 
     # Get file name
+    print("Getting filename")
     input_pdf_name = input_pdf_path.split('.')[-2]
 
     # Convert the PDF to images
+    print("Converting pdf to images")
     pdf_images_dir = convert_to_images(input_pdf_path)
 
     # Get the file paths of the images
+    print("Gathering converted images")
     pdf_images = glob(f'{pdf_images_dir}/*.{img_format}', recursive=True)
     pdf_images.sort()
 
     # Redact images
+    print("Redacting images")
     redacted_image_files = []
 
     for pdf_image in pdf_images:
@@ -163,9 +172,11 @@ def predict(input_pdf_path, redaction_score_threshold):
 
 
     # Convert the redacted images to a single PDF
+    print("Stitching images to pdf")
     redacted_pdf_path = stich_images_to_pdf(redacted_image_files, input_pdf_name)
 
     # Cleanup
+    print("Cleaning residue")
     cleanup(redacted_image_files, pdf_images, pdf_images_dir)
 
     return redacted_pdf_path
