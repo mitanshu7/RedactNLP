@@ -1,0 +1,6 @@
+opencv-python
+easyocr
+pdf2image
+img2pdf
+torch
+transformers
