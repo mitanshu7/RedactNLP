@@ -33,9 +33,9 @@ To redact a PDF:
 ```bash
 python app.py
 ```
-Then navigate to `http://localhost:7860
+Then navigate to http://localhost:7860
 
-or simply visit `https://huggingface.co/spaces/bluuebunny/RedactNLP`
+or simply visit https://huggingface.co/spaces/bluuebunny/RedactNLP
 
 ## Contributing
 
