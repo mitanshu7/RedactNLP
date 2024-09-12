@@ -1,6 +1,7 @@
 # RedactNLP: Redact Your PDF!
 
 RedactNLP is a tool that allows you to automatically redact sensitive information from PDF documents using natural language processing and computer vision techniques.  
+
 Visit https://huggingface.co/spaces/bluuebunny/RedactNLP for the hosted demo on Huggingface Spaces.
 
 ## How Redaction Works
